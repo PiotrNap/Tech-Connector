@@ -3,12 +3,14 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const config = require("config");
 const axios = require("axios");
+const normalize = require("normalize-url");
 const { check, validationResult } = require("express-validator");
 
 const auth = require("../../middlewares/auth");
 const Profile = require("../../models/Profile");
 const User = require("../../models/User");
 
+// Get current user profile
 router.get("/me", auth, async (req, res) => {
   try {
     const profile = await Profile.findOne({
@@ -25,6 +27,7 @@ router.get("/me", auth, async (req, res) => {
   }
 });
 
+// Create or update profile
 router.post(
   "/",
   [
@@ -55,18 +58,18 @@ router.post(
       linkedin,
     } = req.body;
 
-    // Build a profile object
-    const profileFields = {};
-    profileFields.user = req.user.id;
-    if (company) profileFields.company = company;
-    if (website) profileFields.website = website;
-    if (location) profileFields.location = location;
-    if (bio) profileFields.bio = bio;
-    if (status) profileFields.status = status;
-    if (githubusername) profileFields.githubusername = githubusername;
-    if (skills) {
-      profileFields.skills = skills.split(",").map((skill) => skill.trim());
-    }
+    const profileFields = {
+      user: req.user.id,
+      company,
+      location,
+      website: website === "" ? "" : normalize(website, { forceHttps: true }),
+      bio,
+      skills: Array.isArray(skills)
+        ? skills
+        : skills.split(",").map((skill) => " " + skill.trim()),
+      status,
+      githubusername,
+    };
 
     // Build social object
     profileFields.social = {};
@@ -84,7 +87,7 @@ router.post(
         profile = await Profile.findOneAndUpdate(
           { user: req.user.id },
           { $set: profileFields },
-          { new: true }
+          { new: true, upsert: true }
         );
 
         return res.json(profile);
